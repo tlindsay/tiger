@@ -7,9 +7,13 @@ description = "Go get 'em, Tiger..."
 language = "go"
 manifest_version = 3
 name = "tiger"
-service_id = ""
+service_id = "u8D0LXbdRYDNeiUuwCgLi1"
+
+[local_server.backends.github]
+url = "https://github.com/"
+override_host = "github.com"
 
 [scripts]
-  build = "go build -o bin/main.wasm ."
-  env_vars = ["GOARCH=wasm", "GOOS=wasip1"]
-  post_init = "go get github.com/fastly/compute-sdk-go@latest"
+build = "go build -o bin/main.wasm ."
+env_vars = ["GOARCH=wasm", "GOOS=wasip1"]
+post_init = "go get github.com/fastly/compute-sdk-go@latest"

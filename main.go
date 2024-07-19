@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"os"
 
 	"github.com/fastly/compute-sdk-go/fsthttp"
@@ -27,56 +29,37 @@ func main() {
 			return
 		}
 
-		// If request is to the `/` path...
-		if r.URL.Path == "/" {
-			// Below are some common patterns for Compute services using TinyGo.
-			// Head to https://developer.fastly.com/learning/compute/go/ to discover more.
+		p := r.URL.Path
+		r.URL.Path = fmt.Sprintf("tlindsay%s", p)
+		r.URL.Scheme = "https"
+		r.CacheOptions.TTL = 5
 
-			// Create a new request.
-			// req, err := fsthttp.NewRequest("GET", "https://example.com", nil)
-			// if err != nil {
-			//   // Handle Error
-			// }
-
-			// Add request headers.
-			// req.Header.Set("Custom-Header", "Welcome to Compute!")
-			// req.Header.Set(
-			//   "Another-Custom-Header",
-			//   "Recommended reading: https://developer.fastly.com/learning/compute"
-			// )
-
-			// Override cache TTL.
-			// req.CacheOptions.TTL = 60
-
-			// Forward the request to a backend named "TheOrigin".
-			// resp, err := req.Send(ctx, "TheOrigin")
-			// if err != nil {
-			//	 w.WriteHeader(fsthttp.StatusBadGateway)
-			//	 fmt.Fprintln(w, err)
-			//	 return
-			// }
-
-			// Remove response headers.
-			// resp.Header.Del("Yet-Another-Custom-Header")
-
-			// Copy all headers from the response.
-			// w.Header().Reset(resp.Header.Clone())
-
-			// Log to a Fastly endpoint.
-			// NOTE: You will need to import "github.com/fastly/compute-sdk-go/rtlog"
-			// for this to work
-			// endpoint := rtlog.Open("my_endpoint")
-			// fmt.Fprintln(endpoint, "Hello from the edge!")
-
-			// Send a default synthetic response.
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-			fmt.Fprintln(w, `<iframe src="https://developer.fastly.com/compute-welcome" style="border:0; position: absolute; top: 0; left: 0; width: 100%; height: 100%"></iframe>`)
+		resp, err := r.Send(ctx, "github")
+		if err != nil {
+			w.WriteHeader(fsthttp.StatusBadGateway)
+			fmt.Fprintln(w, err.Error())
 			return
 		}
 
-		// Catch all other requests and return a 404.
-		w.WriteHeader(fsthttp.StatusNotFound)
-		fmt.Fprintf(w, "The page you requested could not be found\n")
+		b, _ := fsthttp.BackendFromName(resp.Backend)
+
+		backendHostname := fmt.Sprintf("%s://%s", r.URL.Scheme, b.HostOverride())
+		if resp.StatusCode == fsthttp.StatusOK {
+			body := fmt.Sprintf(
+				`<html><head><meta name="go-import" content="%s%s git %s/%s"></head></html>`,
+				r.URL.Hostname(),
+				p,
+				backendHostname,
+				resp.Request.URL.Path,
+			)
+			w.Header().Add("Content-Type", "text/html; charset=utf-8")
+			w.Header().Add("Content-Length", fmt.Sprintf("%d", len([]byte(body))))
+			log.Printf("BODY: %s", body)
+			fmt.Fprintln(w, body)
+		} else {
+			w.Header().Reset(resp.Header)
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		}
 	})
 }
